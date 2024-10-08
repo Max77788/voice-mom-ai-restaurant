@@ -19,6 +19,13 @@ import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
+// Note: dotenv is typically used in Node.js environments, not in browser-side code.
+// For browser-side React apps, environment variables are usually handled differently.
+// If you need to access environment variables in a React app, they should be prefixed with REACT_APP_
+// and accessed via process.env.REACT_APP_VARIABLE_NAME
+
+// No need to import or configure dotenv in browser-side code
+
 import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
 import { Button } from '../components/button/Button';
 import { Toggle } from '../components/toggle/Toggle';
@@ -59,14 +66,14 @@ export function ConsolePage() {
    * Ask user for API Key
    * If we're using the local relay server, we don't need this
    */
-  const apiKey = LOCAL_RELAY_SERVER_URL
-    ? ''
-    : localStorage.getItem('tmp::voice_api_key') ||
-      prompt('OpenAI API Key') ||
-      '';
-  if (apiKey !== '') {
-    localStorage.setItem('tmp::voice_api_key', apiKey);
+  const apiKey = process.env.REACT_APP_OPENAI_API_KEY;
+  // If the above doesn't work, you might need to use import.meta.env for Vite projects:
+  // const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  
+  if (!apiKey) {
+    console.error('REACT_APP_OPENAI_API_KEY is not set in the environment variables');
   }
+  // console.log("API Key:", apiKey);
 
   /**
    * Instantiate:
@@ -115,6 +122,10 @@ export function ConsolePage() {
   const [expandedEvents, setExpandedEvents] = useState<{
     [key: string]: boolean;
   }>({});
+
+  // Add a new state for order details
+  const [orderDetails, setOrderDetails] = useState<any>(null);
+
   const [isConnected, setIsConnected] = useState(false);
   const [canPushToTalk, setCanPushToTalk] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
@@ -385,7 +396,7 @@ export function ConsolePage() {
     client.addTool(
       {
         name: 'set_memory',
-        description: 'Saves important data about the user into memory.',
+        description: 'Saves and erases important data about the user\'s order.',
         parameters: {
           type: 'object',
           properties: {
@@ -411,6 +422,7 @@ export function ConsolePage() {
         return { ok: true };
       }
     );
+    
     client.addTool(
       {
         name: 'get_weather',
@@ -454,7 +466,101 @@ export function ConsolePage() {
         return json;
       }
     );
+    
 
+    
+    
+    client.addTool(
+      {
+        name: "initiate_order",
+        description: "This action initiates the order and generates the link to the checkout page based on Matroninis's order's details",
+        parameters: {
+          type: "object",
+          properties: {
+            dishes: {
+              type: "array",
+              description: "An array of objects representing each ordered item. Each object must accurately detail the item's name and quantity ordered. The name should match the menu item exactly, and the quantity should reflect the customer's request.",
+              items: {
+                type: "object",
+                properties: {
+                  dish: {
+                    type: "string",
+                    description: "The name of the item being ordered."
+                  },
+                  quantity: {
+                    type: "integer",
+                    description: "The quantity of the item being ordered."
+                  },
+                  price: {
+                    type: "number",
+                    description: "The price of the item being ordered."
+                  }
+                },
+                required: ["dish", "quantity", "price"]
+              }
+            },
+            place: {
+              type: "string",
+              description: "The place where the order will be delivered",
+              enum: ["delivery", "pickup", "dine-in"]
+            }
+          },
+          required: ["dishes", "place"]
+      }
+    },
+      /* parameters: {
+        type: 'object',
+        properties: {
+          dish: {
+            type: 'string',
+            description:
+              'The name of the dish to be ordered',
+          },
+          quantity: {
+            type: 'number',
+            description: 'The quantity of the dish to be ordered',
+          },
+        },
+        required: ['dish', 'quantity'],
+      },      },
+      */
+      
+      async ({ dishes, place }: { dishes: Array<{ dish: string; quantity: number; price: number }>, place: string }) => {
+        console.log("initiate_order() function called with items:", items);
+        // Calculate total order amount
+        const totalAmount = dishes.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        
+        // Generate a mock order        
+        const orderId = Math.random().toString(36).substr(2, 9);
+        
+        // Create order details object
+        const order = {
+          id: orderId,
+          items: dishes,
+          place: place,
+          totalAmount: totalAmount,
+          checkoutUrl: `https://matroninis.com/checkout/${orderId}`
+        };
+        
+        // Update state with order details
+        setOrderDetails(order);
+        
+        // Return a success message with order details
+        return {
+          success: true,
+          message: "Order initiated successfully",
+          orderId: orderId,
+          totalAmount: totalAmount,
+          checkoutUrl: order.checkoutUrl
+        };
+      /*
+        async ({ dish, quantity }: { [key: string]: any }) => {
+          console.log("initiate_order() function called with items:", dish, quantity);
+      */
+    }
+      
+    );
+    
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
       setRealtimeEvents((realtimeEvents) => {
@@ -503,28 +609,19 @@ export function ConsolePage() {
   /**
    * Render the application
    */
-  return (
-    <div data-component="ConsolePage">
-      <div className="content-top">
-        <div className="content-title">
-          <img src="/openai-logomark.svg" />
-          <span>realtime console</span>
-        </div>
-        <div className="content-api-key">
-          {!LOCAL_RELAY_SERVER_URL && (
-            <Button
-              icon={Edit}
-              iconPosition="end"
-              buttonStyle="flush"
-              label={`api key: ${apiKey.slice(0, 3)}...`}
-              onClick={() => resetAPIKey()}
-            />
-          )}
-        </div>
-      </div>
-      <div className="content-main">
-        <div className="content-logs">
-          <div className="content-block events">
+  
+    return (
+      <div data-component="ConsolePage">
+        <div className="content-main">
+          <div className="content-header">
+            <h1>Order in Matroninis</h1>
+          </div>
+          
+          <div className="content-body">
+            {/* This space is intentionally left empty */}
+          </div>
+          
+          <div className="content-footer">
             <div className="visualization">
               <div className="visualization-entry client">
                 <canvas ref={clientCanvasRef} />
@@ -533,199 +630,26 @@ export function ConsolePage() {
                 <canvas ref={serverCanvasRef} />
               </div>
             </div>
-            <div className="content-block-title">events</div>
-            <div className="content-block-body" ref={eventsScrollRef}>
-              {!realtimeEvents.length && `awaiting connection...`}
-              {realtimeEvents.map((realtimeEvent, i) => {
-                const count = realtimeEvent.count;
-                const event = { ...realtimeEvent.event };
-                if (event.type === 'input_audio_buffer.append') {
-                  event.audio = `[trimmed: ${event.audio.length} bytes]`;
-                } else if (event.type === 'response.audio.delta') {
-                  event.delta = `[trimmed: ${event.delta.length} bytes]`;
-                }
-                return (
-                  <div className="event" key={event.event_id}>
-                    <div className="event-timestamp">
-                      {formatTime(realtimeEvent.time)}
-                    </div>
-                    <div className="event-details">
-                      <div
-                        className="event-summary"
-                        onClick={() => {
-                          // toggle event details
-                          const id = event.event_id;
-                          const expanded = { ...expandedEvents };
-                          if (expanded[id]) {
-                            delete expanded[id];
-                          } else {
-                            expanded[id] = true;
-                          }
-                          setExpandedEvents(expanded);
-                        }}
-                      >
-                        <div
-                          className={`event-source ${
-                            event.type === 'error'
-                              ? 'error'
-                              : realtimeEvent.source
-                          }`}
-                        >
-                          {realtimeEvent.source === 'client' ? (
-                            <ArrowUp />
-                          ) : (
-                            <ArrowDown />
-                          )}
-                          <span>
-                            {event.type === 'error'
-                              ? 'error!'
-                              : realtimeEvent.source}
-                          </span>
-                        </div>
-                        <div className="event-type">
-                          {event.type}
-                          {count && ` (${count})`}
-                        </div>
-                      </div>
-                      {!!expandedEvents[event.event_id] && (
-                        <div className="event-payload">
-                          {JSON.stringify(event, null, 2)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="content-block conversation">
-            <div className="content-block-title">conversation</div>
-            <div className="content-block-body" data-conversation-content>
-              {!items.length && `awaiting connection...`}
-              {items.map((conversationItem, i) => {
-                return (
-                  <div className="conversation-item" key={conversationItem.id}>
-                    <div className={`speaker ${conversationItem.role || ''}`}>
-                      <div>
-                        {(
-                          conversationItem.role || conversationItem.type
-                        ).replaceAll('_', ' ')}
-                      </div>
-                      <div
-                        className="close"
-                        onClick={() =>
-                          deleteConversationItem(conversationItem.id)
-                        }
-                      >
-                        <X />
-                      </div>
-                    </div>
-                    <div className={`speaker-content`}>
-                      {/* tool response */}
-                      {conversationItem.type === 'function_call_output' && (
-                        <div>{conversationItem.formatted.output}</div>
-                      )}
-                      {/* tool call */}
-                      {!!conversationItem.formatted.tool && (
-                        <div>
-                          {conversationItem.formatted.tool.name}(
-                          {conversationItem.formatted.tool.arguments})
-                        </div>
-                      )}
-                      {!conversationItem.formatted.tool &&
-                        conversationItem.role === 'user' && (
-                          <div>
-                            {conversationItem.formatted.transcript ||
-                              (conversationItem.formatted.audio?.length
-                                ? '(awaiting transcript)'
-                                : conversationItem.formatted.text ||
-                                  '(item sent)')}
-                          </div>
-                        )}
-                      {!conversationItem.formatted.tool &&
-                        conversationItem.role === 'assistant' && (
-                          <div>
-                            {conversationItem.formatted.transcript ||
-                              conversationItem.formatted.text ||
-                              '(truncated)'}
-                          </div>
-                        )}
-                      {conversationItem.formatted.file && (
-                        <audio
-                          src={conversationItem.formatted.file.url}
-                          controls
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="content-actions">
-            <Toggle
-              defaultValue={false}
-              labels={['manual', 'vad']}
-              values={['none', 'server_vad']}
-              onChange={(_, value) => changeTurnEndType(value)}
-            />
-            <div className="spacer" />
-            {isConnected && canPushToTalk && (
-              <Button
-                label={isRecording ? 'release to send' : 'push to talk'}
-                buttonStyle={isRecording ? 'alert' : 'regular'}
-                disabled={!isConnected || !canPushToTalk}
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
+            
+            <div className="content-actions">
+              <Toggle
+                defaultValue={false}
+                labels={['manual', 'vad']}
+                values={['none', 'server_vad']}
+                onChange={(_, value) => changeTurnEndType(value)}
               />
-            )}
-            <div className="spacer" />
-            <Button
-              label={isConnected ? 'disconnect' : 'connect'}
-              iconPosition={isConnected ? 'end' : 'start'}
-              icon={isConnected ? X : Zap}
-              buttonStyle={isConnected ? 'regular' : 'action'}
-              onClick={
-                isConnected ? disconnectConversation : connectConversation
-              }
-            />
-          </div>
-        </div>
-        <div className="content-right">
-          <div className="content-block map">
-            <div className="content-block-title">get_weather()</div>
-            <div className="content-block-title bottom">
-              {marker?.location || 'not yet retrieved'}
-              {!!marker?.temperature && (
-                <>
-                  <br />
-                  🌡️ {marker.temperature.value} {marker.temperature.units}
-                </>
-              )}
-              {!!marker?.wind_speed && (
-                <>
-                  {' '}
-                  🍃 {marker.wind_speed.value} {marker.wind_speed.units}
-                </>
-              )}
-            </div>
-            <div className="content-block-body full">
-              {coords && (
-                <Map
-                  center={[coords.lat, coords.lng]}
-                  location={coords.location}
-                />
-              )}
-            </div>
-          </div>
-          <div className="content-block kv">
-            <div className="content-block-title">set_memory()</div>
-            <div className="content-block-body content-kv">
-              {JSON.stringify(memoryKv, null, 2)}
+              <Button
+                label={isConnected ? 'disconnect' : 'connect'}
+                iconPosition={isConnected ? 'end' : 'start'}
+                icon={isConnected ? X : Zap}
+                buttonStyle={isConnected ? 'regular' : 'action'}
+                onClick={
+                  isConnected ? disconnectConversation : connectConversation
+                }
+              />
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
 }
