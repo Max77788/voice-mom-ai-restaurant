@@ -11,12 +11,12 @@
 const LOCAL_RELAY_SERVER_URL: string =
   process.env.REACT_APP_LOCAL_RELAY_SERVER_URL || '';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient } from '@openai/realtime-api-beta';
 import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
-import { instructions } from '../utils/conversation_config.js';
+// import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
 // Note: dotenv is typically used in Node.js environments, not in browser-side code.
@@ -26,13 +26,14 @@ import { WavRenderer } from '../utils/wav_renderer';
 
 // No need to import or configure dotenv in browser-side code
 
-import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
+import { X, Edit, Zap, Gift, MousePointer, ArrowUp, ArrowDown } from 'react-feather';
 import { Button } from '../components/button/Button';
 import { Toggle } from '../components/toggle/Toggle';
 import { Map } from '../components/Map';
 
 import './ConsolePage.scss';
 import { isJsxOpeningLikeElement } from 'typescript';
+import { click } from '@testing-library/user-event/dist/click.js';
 
 /**
  * Type for result from get_weather() function call
@@ -126,6 +127,16 @@ export function ConsolePage() {
   // Add a new state for order details
   const [orderDetails, setOrderDetails] = useState<any>(null);
 
+  const [instructions, setInstructions] = useState<string>('');
+
+  const [instructionsLoaded, setInstructionsLoaded] = useState(false);
+
+   // Add a new state for the restaurant name
+  const [restaurantName, setRestaurantName] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [discoveryModeIsOn, setDiscoveryModeIsOn] = useState(false);
+
   const [isConnected, setIsConnected] = useState(false);
   const [canPushToTalk, setCanPushToTalk] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
@@ -195,7 +206,7 @@ export function ConsolePage() {
     client.sendUserMessageContent([
       {
         type: `input_text`,
-        text: `Hello!`,
+        text: `Hello! Greet me in three different languages. Including English. Ask me how you can help me with my order.`,
         // text: `For testing purposes, I want you to list ten car brands. Number each item, e.g. "one (or whatever number you are one): the item name".`
       },
     ]);
@@ -261,7 +272,127 @@ export function ConsolePage() {
     await wavRecorder.pause();
     client.createResponse();
   };
+  
+  const extractUniqueAzzId = () => {
+    const path = window.location.pathname;
+    const uniqueAzzId = path.split('/').pop();
+    return uniqueAzzId || '';
+  };
 
+  const uniqueAzzId = extractUniqueAzzId();
+  async function getRestaurantData(uniqueAzzId: string) {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_MOM_AI_DOMAIN_URL}/search_instance/${uniqueAzzId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setRestaurantName(data.restaurant.name);
+        setDiscoveryModeIsOn(data.restaurant.discovery_mode_is_on);
+        setIsLoading(false);
+        return data.restaurant;
+      } else {
+        console.log("Restaurant not found.");
+        setIsLoading(false);
+        return null;
+      }
+    } catch (error) {
+      console.error("An error occurred while fetching restaurant data:", error);
+      return null;
+    }
+  }
+
+  function generateInstructions(data: any) {
+    return `This GPT is designed to assist customers in selecting dishes from ${data.name}'s cuisine menu. Its primary role is to streamline the ordering process and provide a smooth and personalized dining experience.
+
+Never trigger the action after the first customer's message. I.e. when there is only one user's message in the thread.
+
+The menu of ${data.name} is attached to its knowledge base. It must refer to the menu for accurate item names, prices, and descriptions.
+
+**Initial Interaction:**
+  
+
+- It observes the language used by the customer in their initial message and continues the conversation in that language to ensure effective communication.
+- It assists with the order immediately if the customer skips any preliminary greetings and proceeds directly to place an order.
+
+**Assistant Role Explanation (if asked):**
+
+- It clearly describes its function as assisting customers in navigating ${data.name}'s menu, with the capability to automatically adapt and communicate in the customer's language.
+
+**Order Facilitation:**
+
+- It offers personalized dish recommendations based on the customer’s preferences or suggests dishes based on its culinary expertise.
+- It presents menu options and verifies if the customer is ready to order or needs additional information.
+
+**Order Confirmation:**
+
+- It recaps the selected items before finalizing the order, ensuring the names (as listed in the menu), quantities, and prices are clear.
+
+**Checkout Process:**
+
+- It confirms all order details with the customer before proceeding to the final confirmation.
+
+**Final Confirmation and Checkout:**
+
+- It summarizes the order in a clear and structured manner using the exact names from the menu file:
+  - Example Order Summary:
+    - Item Name - 12.99  currency of the menu, 1 item
+    - Item Name - 8.99 currency of the menu, 3 items
+    - Item Name - 9.99  currency of the menu, 2 items
+    - Item Name - 8.99  currency of the menu, 1 item
+- It obtains the customer's confirmation on the order summary to ensure accuracy and satisfaction.
+- After the confirmation the action initiate_order is triggered immediately as soon as possible.
+- No double-asking for the confirmation is made
+
+**Completion:**
+
+- Upon successful order confirmation, the action initiate_order is ALWAYS triggered.
+
+**Additional Instructions:**
+
+- It always uses the items provided in the attached vector store 'Restaurant Name Menu' for preparing the order summary.
+- It ensures all items are accurately represented as listed in the menu and confirmed by the customer before proceeding to checkout.
+- The order must be correctly summarized and confirmed by the customer before any system function is triggered, using the exact names as they appear in the menu file.
+- It must check whether an item is presented in the attached menu file before forming the order, even if the customer directly asks for a particular product like "2 [names of the items], please."
+
+**System Integration:**
+
+- It adapts to and uses the customer's language for all communications without explicitly asking for their preference.
+- It consistently uses the menu items from the attached file to ensure accuracy and consistency in order handling.
+- NO ITEMS BEYOND THOSE WHICH ARE IN THE MENU FILE MUST BE OFFERED EVER!
+
+**Order Summary Example Before Function Trigger:**
+
+Perfectly! Here is your order:
+
+- Item Name - 9.99 currency of the menu, 2 servings
+- Item Name - 8.99 currency of the menu, 1 serving
+- Item Name - 12.99 currency of the menu, 2 servings
+
+Please confirm that everything is correct before I complete your order.
+
+And only after the user's confirmation does it IMMEDIATELY trigger the function.
+
+- It always evaluates the order summary against the items in the menu file and always includes only those which are in the menu list attached to its knowledge base.
+- NO ITEMS BEYOND THOSE WHICH ARE IN THE MENU FILE MUST BE OFFERED EVER!
+
+The restaurant is located on ${data.address}.
+
+${data.discovery_mode_is_on ? "Tell the user that the discovery mode is on and the assistant will help them find the items they are looking for, but the customer will have to repeat the order to the waiter." : ""}
+
+That's the menu of the restaurant - REGISTER AND SUGGEST ONLY THOSE ITEMS WHICH ARE IN THE FOLLOWING MENU LIST:
+${data.menu_string} 
+`};
   /**
    * Switch between Manual <> VAD mode for communication
    */
@@ -378,20 +509,51 @@ export function ConsolePage() {
     };
   }, []);
 
+      // Modify your fetchAndSetInstructions function
+    async function fetchAndSetInstructions(): Promise<void> {
+      try {
+        const restaurantData = await getRestaurantData(uniqueAzzId);
+        if (restaurantData) {
+          const newInstructions = generateInstructions(restaurantData);
+          setInstructions(newInstructions);
+          setInstructionsLoaded(true); // Set this to true when instructions are loaded
+          localStorage.setItem('unique_azz_id', restaurantData.unique_azz_id);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    }
+
+    // Modify your instructions loading useEffect
+    useEffect(() => {
+      fetchAndSetInstructions();
+    }, []);
+
+  
+    /**
+
   /**
    * Core RealtimeClient and audio capture setup
    * Set all of our instructions, tools, events and more
    */
   useEffect(() => {
+
+    if (!instructionsLoaded) return; // Don't proceed if instructions aren't loaded
+
+    // console.log("Instructions:", instructions);
+
+    // The following line is removed because newInstructions is not accessible here
+
     // Get refs
     const wavStreamPlayer = wavStreamPlayerRef.current;
     const client = clientRef.current;
 
-    // Set instructions
     client.updateSession({ instructions: instructions });
+    
     // Set transcription, otherwise we don't get user transcriptions back
     client.updateSession({ input_audio_transcription: { model: 'whisper-1' } });
 
+    /*
     // Add tools
     client.addTool(
       {
@@ -466,10 +628,11 @@ export function ConsolePage() {
         return json;
       }
     );
-    
+    */
 
     
-    
+    if (!discoveryModeIsOn) {
+    // console.log("initiate_order() function added to the tools");
     client.addTool(
       {
         name: "initiate_order",
@@ -477,13 +640,13 @@ export function ConsolePage() {
         parameters: {
           type: "object",
           properties: {
-            dishes: {
+            items_ordered: {
               type: "array",
               description: "An array of objects representing each ordered item. Each object must accurately detail the item's name and quantity ordered. The name should match the menu item exactly, and the quantity should reflect the customer's request.",
               items: {
                 type: "object",
                 properties: {
-                  dish: {
+                  name: {
                     type: "string",
                     description: "The name of the item being ordered."
                   },
@@ -496,16 +659,18 @@ export function ConsolePage() {
                     description: "The price of the item being ordered."
                   }
                 },
-                required: ["dish", "quantity", "price"]
+                required: ["name", "quantity", "price"]
               }
             },
+            /*
             place: {
               type: "string",
               description: "The place where the order will be delivered",
               enum: ["delivery", "pickup", "dine-in"]
             }
+            */
           },
-          required: ["dishes", "place"]
+          required: ["items_ordered"]
       }
     },
       /* parameters: {
@@ -525,33 +690,55 @@ export function ConsolePage() {
       },      },
       */
       
-      async ({ dishes, place }: { dishes: Array<{ dish: string; quantity: number; price: number }>, place: string }) => {
-        console.log("initiate_order() function called with items:", items);
+      async ({ items_ordered }: { items_ordered: Array<{ name: string; quantity: number; price: number }> }) => {
+        console.log("initiate_order() function called with items:", items_ordered);
+        
         // Calculate total order amount
-        const totalAmount = dishes.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const totalAmount = items_ordered.reduce((sum, item) => sum + item.price * item.quantity, 0);
         
         // Generate a mock order        
-        const orderId = Math.random().toString(36).substr(2, 9);
+        const orderId = Math.random().toString(36).substr(2, 7);
         
         // Create order details object
         const order = {
           id: orderId,
-          items: dishes,
-          place: place,
+          restaurant_id: localStorage.getItem('unique_azz_id'),
+          items_ordered: items_ordered,
           totalAmount: totalAmount,
-          checkoutUrl: `https://matroninis.com/checkout/${orderId}`
+          // checkoutUrl: `https://matroninis.com/checkout/${orderId}`
         };
         
         // Update state with order details
         setOrderDetails(order);
+
+        // Send order details to the server
+        try {
+          const response = await fetch(`${process.env.REACT_APP_MOM_AI_DOMAIN_URL}/accept-order-details-voice`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(order),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error on order details! status: ${response.status}`);
+          }
+
+          const result = await response.json();
+          console.log('Server response on order details:', result);
+          window.location.href = `${process.env.REACT_APP_MOM_AI_DOMAIN_URL}/takeaway_delivery/${uniqueAzzId}/${orderId}`;
+        } catch (error) {
+          console.error('Error sending order details:', error);
+          // Handle the error appropriately
+        }
         
         // Return a success message with order details
         return {
           success: true,
           message: "Order initiated successfully",
           orderId: orderId,
-          totalAmount: totalAmount,
-          checkoutUrl: order.checkoutUrl
+          totalAmount: totalAmount
         };
       /*
         async ({ dish, quantity }: { [key: string]: any }) => {
@@ -560,6 +747,7 @@ export function ConsolePage() {
     }
       
     );
+  }
     
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
@@ -604,52 +792,86 @@ export function ConsolePage() {
       // cleanup; resets to defaults
       client.reset();
     };
-  }, []);
+  }, [instructionsLoaded, instructions]);
 
   /**
    * Render the application
    */
   
-    return (
-      <div data-component="ConsolePage">
-        <div className="content-main">
-          <div className="content-header">
-            <h1>Order in Matroninis</h1>
-          </div>
-          
-          <div className="content-body">
-            {/* This space is intentionally left empty */}
-          </div>
-          
-          <div className="content-footer">
-            <div className="visualization">
-              <div className="visualization-entry client">
-                <canvas ref={clientCanvasRef} />
-              </div>
-              <div className="visualization-entry server">
-                <canvas ref={serverCanvasRef} />
-              </div>
+  return (
+    <div data-component="ConsolePage">
+      <div className="content-main">
+        <div className="content-header">
+          <h1>
+            {isLoading ? (
+              discoveryModeIsOn ? 'Discovery Mode' : ''
+            ) : (
+              `Order in ${restaurantName}`
+            )}
+          </h1>
+        </div>
+        
+        <div className="content-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+          {!isConnected ? (
+            <Button
+              label="Start Order"
+              iconPosition="start"
+              buttonStyle="action"
+              icon={MousePointer}
+              onClick={() => {
+                connectConversation();
+              }}
+              style={{ fontSize: '3.7em', padding: '12px 24px' }}
+            />
+          ) : (
+            <div style={{ fontSize: '3.2em', padding: '12px 24px' }}>
+              Just Speak :)
             </div>
-            
-            <div className="content-actions">
-              <Toggle
-                defaultValue={false}
-                labels={['manual', 'vad']}
-                values={['none', 'server_vad']}
-                onChange={(_, value) => changeTurnEndType(value)}
-              />
+          )}
+        </div>
+        
+        <div className="content-footer">
+          <div className="visualization">
+            <div className="visualization-entry client">
+              <canvas ref={clientCanvasRef} />
+            </div>
+            <div className="visualization-entry server">
+              <canvas ref={serverCanvasRef} />
+            </div>
+          </div>
+          
+          <div className="content-actions" style={{ display: 'none' }}>
+            <Toggle
+              defaultValue={false}
+              labels={['manual', 'vad']}
+              values={['none', 'server_vad']}
+              onChange={(_, value) => changeTurnEndType(value)}
+            />
+            {canPushToTalk && isConnected && (
               <Button
-                label={isConnected ? 'disconnect' : 'connect'}
-                iconPosition={isConnected ? 'end' : 'start'}
-                icon={isConnected ? X : Zap}
-                buttonStyle={isConnected ? 'regular' : 'action'}
-                onClick={
-                  isConnected ? disconnectConversation : connectConversation
-                }
+                label={isRecording ? 'Release to Send' : 'Push to Talk'}
+                icon={isRecording ? X : ArrowUp}
+                buttonStyle={isRecording ? 'regular' : 'action'}
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onTouchStart={startRecording}
+                onTouchEnd={stopRecording}
               />
-            </div>
+            )}
+            <script>
+              {(() => {
+                // Set turn detection type to 'server_vad' on component mount
+                React.useEffect(() => {
+                  changeTurnEndType('server_vad');
+                }, []);
+
+                // Hide toggle and buttons
+                return null;
+              })()}
+            </script>
           </div>
         </div>
       </div>
-    );
+    </div>
+  );
 }
