@@ -840,13 +840,13 @@ ${data.menu_string}
             </div>
           </div>
           
-          <div className="content-actions" style={{ display: 'none' }}>
-            <Toggle
+          <div className="content-actions">
+            {/* <Toggle
               defaultValue={false}
               labels={['manual', 'vad']}
               values={['none', 'server_vad']}
               onChange={(_, value) => changeTurnEndType(value)}
-            />
+            /> */}
             {canPushToTalk && isConnected && (
               <Button
                 label={isRecording ? 'Release to Send' : 'Push to Talk'}
@@ -862,7 +862,7 @@ ${data.menu_string}
               {(() => {
                 // Set turn detection type to 'server_vad' on component mount
                 React.useEffect(() => {
-                  changeTurnEndType('server_vad');
+                  changeTurnEndType('none');
                 }, []);
 
                 // Hide toggle and buttons
