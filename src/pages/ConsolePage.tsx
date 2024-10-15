@@ -849,13 +849,17 @@ ${data.menu_string}
             /> */}
             {canPushToTalk && isConnected && (
               <Button
-                label={isRecording ? 'Release to Send' : 'Push to Talk'}
+                label={isRecording ? 'Click to Stop' : 'Click to Talk'}
                 icon={isRecording ? X : ArrowUp}
                 buttonStyle={isRecording ? 'regular' : 'action'}
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onTouchStart={startRecording}
-                onTouchEnd={stopRecording}
+                onClick={() => {
+                  if (isRecording) {
+                    stopRecording();
+                  } else {
+                    startRecording();
+                  }
+                  setIsRecording(!isRecording);
+                }}
               />
             )}
           </div>
