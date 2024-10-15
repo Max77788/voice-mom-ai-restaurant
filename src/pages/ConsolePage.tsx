@@ -825,7 +825,7 @@ ${data.menu_string}
             />
           ) : (
             <div style={{ fontSize: '3.2em', padding: '12px 24px' }}>
-              Just Speak :)
+              Just Press the Button and Speak :)
             </div>
           )}
         </div>
@@ -858,17 +858,6 @@ ${data.menu_string}
                 onTouchEnd={stopRecording}
               />
             )}
-            <script>
-              {(() => {
-                // Set turn detection type to 'server_vad' on component mount
-                React.useEffect(() => {
-                  changeTurnEndType('none');
-                }, []);
-
-                // Hide toggle and buttons
-                return null;
-              })()}
-            </script>
           </div>
         </div>
       </div>
