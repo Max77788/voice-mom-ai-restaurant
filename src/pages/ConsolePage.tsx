@@ -848,7 +848,7 @@ ${data.menu_string}
             />
           ) : (
             <div style={{ fontSize: '3.2em', padding: '12px 24px' }}>
-              Just Speak :)
+              Just Press the Button and Speak :)
             </div>
           )}
         </div>
@@ -863,35 +863,28 @@ ${data.menu_string}
             </div>
           </div>
           
-          <div className="content-actions" style={{ display: 'none' }}>
-            <Toggle
+          <div className="content-actions">
+            {/* <Toggle
               defaultValue={false}
               labels={['manual', 'vad']}
               values={['none', 'server_vad']}
               onChange={(_, value) => changeTurnEndType(value)}
-            />
+            /> */}
             {canPushToTalk && isConnected && (
               <Button
-                label={isRecording ? 'Release to Send' : 'Push to Talk'}
+                label={isRecording ? 'Click to Stop' : 'Click to Talk'}
                 icon={isRecording ? X : ArrowUp}
                 buttonStyle={isRecording ? 'regular' : 'action'}
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onTouchStart={startRecording}
-                onTouchEnd={stopRecording}
+                onClick={() => {
+                  if (isRecording) {
+                    stopRecording();
+                  } else {
+                    startRecording();
+                  }
+                  setIsRecording(!isRecording);
+                }}
               />
             )}
-            <script>
-              {(() => {
-                // Set turn detection type to 'server_vad' on component mount
-                React.useEffect(() => {
-                  changeTurnEndType('server_vad');
-                }, []);
-
-                // Hide toggle and buttons
-                return null;
-              })()}
-            </script>
           </div>
         </div>
       </div>
