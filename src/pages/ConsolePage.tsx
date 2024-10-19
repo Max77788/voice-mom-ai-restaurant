@@ -751,6 +751,34 @@ ${data.menu_string}
     
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
+
+      if (realtimeEvent.event.type === "response.done"){
+        console.log(realtimeEvent)
+    
+        console.log("Triggered cost section")
+
+        const input_tokens = realtimeEvent.event.response.usage.input_tokens
+        const output_tokens = realtimeEvent.event.response.usage.output_tokens
+    
+        const payload = {
+          unique_azz_id: localStorage.getItem('unique_azz_id'),
+          input_tokens: input_tokens,
+          output_tokens: output_tokens
+        }
+          fetch(`${process.env.REACT_APP_MOM_AI_DOMAIN_URL}/charge_for_voice_realtime_response`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          })
+          .then(response => response.json())
+          .then(data => console.log('Success:', data))
+          .catch((error) => {
+            console.error('Error:', error);
+          });
+      }
+      
       setRealtimeEvents((realtimeEvents) => {
         const lastEvent = realtimeEvents[realtimeEvents.length - 1];
         if (lastEvent?.event.type === realtimeEvent.event.type) {
@@ -770,7 +798,7 @@ ${data.menu_string}
         await client.cancelResponse(trackId, offset);
       }
     });
-    client.on  ('conversation.updated', async ({ item, delta }: any) => {
+    client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
       if (delta?.audio) {                                                                                                                    
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
@@ -786,27 +814,9 @@ ${data.menu_string}
       setItems(items);
     });
 
-    client.on('response.done', (event: any) => {
+    client.on('response.done', (event: RealtimeEvent) => {
     
-    console.log(event)
     
-    console.log("Triggered cost section")
-
-    const payload = {
-      unique_azz_id: localStorage.getItem('unique_azz_id')
-    }
-      fetch(`${process.env.REACT_APP_MOM_AI_DOMAIN_URL}/charge_for_voice_realtime_response`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-      .then(response => response.json())
-      .then(data => console.log('Success:', data))
-      .catch((error) => {
-        console.error('Error:', error);
-      });
     
 });
     setItems(client.conversation.getItems());
